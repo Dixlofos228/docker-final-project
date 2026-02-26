@@ -1,0 +1,105 @@
+networks:
+  dev-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./mongodb_data
+      o: bind
+
+services:
+  # 1. LDAP сервер
+  ldap:
+    image: osixia/openldap:latest
+    container_name: ldap
+    hostname: ldap
+    networks:
+      - dev-network
+    ports:
+      - "389:389"
+      - "636:636"
+    environment:
+      - LDAP_ORGANISATION="My Company"
+      - LDAP_DOMAIN=ignatenko.ru
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_CONFIG_PASSWORD=admin
+    volumes:
+      - ./ldap_data:/var/lib/ldap
+      - ./ldap_admin_data:/etc/ldap/slapd.d
+    restart: unless-stopped
+
+  # 2. Веб-интерфейс для LDAP (phpLDAPadmin)
+  ldap_admin:
+    image: osixia/phpldapadmin:latest
+    container_name: ldap_admin
+    hostname: ldap_admin
+    networks:
+      - dev-network
+    ports:
+      - "8080:80"
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=ldap
+      - PHPLDAPADMIN_HTTPS=false
+    depends_on:
+      - ldap
+    restart: unless-stopped
+
+  # 3. GitLab
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    hostname: gitlab
+    networks:
+      - dev-network
+    ports:
+      - "2222:22"
+      - "8081:80"
+    volumes:
+      - ./gitlab_home/config:/etc/gitlab
+      - ./gitlab_home/logs:/var/log/gitlab
+      - ./gitlab_home/data:/var/opt/gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8081'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+    depends_on:
+      - ldap
+    restart: unless-stopped
+
+  # 4. MongoDB для Rocket.Chat
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    hostname: mongodb
+    networks:
+      dev-network:
+        aliases:
+          - mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+
+  # 5. Rocket.Chat
+  rocketchat:
+    image: registry.rocket.chat/rocketchat/rocket.chat:latest
+    container_name: rocketchat
+    hostname: rocketchat
+    networks:
+      - dev-network
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/rocketchat?replicaSet=rs0
+      - MONGO_OPLOG_URL=mongodb://mongodb:27017/local?replicaSet=rs0
+      - ROOT_URL=http://localhost:3000
+      - PORT=3000
+      - DEPLOY_METHOD=docker
+    depends_on:
+      - mongodb
+    restart: unless-stopped

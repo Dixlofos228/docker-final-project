@@ -1,0 +1,7 @@
+# Игнорируем папки с данными (они слишком большие и с правами)
+mongodb_data/
+ldap_data/
+ldap_admin_data/
+gitlab_home/data/
+gitlab_home/logs/
+gitlab_home/config/gitlab-secrets.json
