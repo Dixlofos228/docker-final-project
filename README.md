@@ -12,8 +12,8 @@
 
 ## Запуск проекта
 ```bash
-#docker-compose up -d
 
+docker-compose up -d
 
 Доступ к сервисам
 Сервис       |       	URL              |         	Логин	Пароль
